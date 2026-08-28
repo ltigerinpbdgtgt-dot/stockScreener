@@ -8,7 +8,7 @@ st.set_page_config(page_title="맞춤형 & S&P 500 퀀트 스크리너", page_ic
 st.title("📈 커스텀 & S&P 500 퀀트 스크리너 대시보드")
 st.caption("대가들의 매매 전략(Minervini, O'Neil, Williams) 기반 맞춤형 분석 시스템")
 
-# 2. S&P 500 전체 500개 종목 티커 자동 수집 함수
+# 2. S&P 500 전체 종목 수집 함수
 @st.cache_data(ttl=86400)
 def get_sp500_tickers():
     try:
@@ -20,57 +20,55 @@ def get_sp500_tickers():
     except Exception:
         return ["MSFT", "GOOGL", "AAPL", "AMZN", "NVDA", "V", "AMAT", "LLY", "JNJ", "PG"]
 
-# 3. 주가 및 이평선 데이터 수집/계산 함수
+# 3. 고속 일괄(Batch) 데이터 수집 및 이평선 계산 함수
 @st.cache_data(ttl=3600)
-def fetch_and_process_data(tickers):
+def fetch_and_process_data_fast(tickers):
+    if not tickers:
+        return pd.DataFrame()
+
+    with st.spinner(f"총 {len(tickers)}개 종목 데이터를 일괄 수집 중입니다... (약 10~20초 소요)"):
+        # 500개 종목 차트 데이터를 한 번에 통째로 다운로드 (차단 방지 핵심)
+        df_hist = yf.download(tickers, period="1y", group_by="ticker", threads=True, progress=False)
+
     all_data = []
-    
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-    total = len(tickers)
 
-    for idx, ticker in enumerate(tickers):
+    for ticker in tickers:
         ticker = ticker.strip().upper()
-        if not ticker:
-            continue
-
-        progress = (idx + 1) / total
-        progress_bar.progress(progress)
-        status_text.text(f"스크리닝 중... ({idx+1}/{total}): {ticker}")
-
         try:
-            stock = yf.Ticker(ticker)
-            hist = stock.history(period="1y")
-            
-            if len(hist) < 200:
+            # 단일 종목 또는 다중 종목 데이터 분기 처리
+            if len(tickers) == 1:
+                stock_data = df_hist
+            else:
+                if ticker not in df_hist.columns.levels[0]:
+                    continue
+                stock_data = df_hist[ticker]
+
+            # 종가(Close) 데이터 추출 및 결측치 제거
+            close = stock_data['Close'].dropna()
+            if len(close) < 200:
                 continue
 
-            # 5가지 이동평균선 계산
-            hist['SMA200'] = hist['Close'].rolling(window=200).mean()
-            hist['SMA100'] = hist['Close'].rolling(window=100).mean()
-            hist['SMA50']  = hist['Close'].rolling(window=50).mean()
-            hist['SMA20']  = hist['Close'].rolling(window=20).mean()
-            hist['SMA9']   = hist['Close'].rolling(window=9).mean()
+            price = float(close.iloc[-1])
+            sma200 = float(close.rolling(200).mean().iloc[-1])
+            sma100 = float(close.rolling(100).mean().iloc[-1])
+            sma50  = float(close.rolling(50).mean().iloc[-1])
+            sma20  = float(close.rolling(20).mean().iloc[-1])
+            sma9   = float(close.rolling(9).mean().iloc[-1])
 
-            price = float(hist['Close'].iloc[-1])
-            sma200 = float(hist['SMA200'].iloc[-1])
-            sma100 = float(hist['SMA100'].iloc[-1])
-            sma50  = float(hist['SMA50'].iloc[-1])
-            sma20  = float(hist['SMA20'].iloc[-1])
-            sma9   = float(hist['SMA9'].iloc[-1])
+            # PER 정보 추출 (실패 시 기본값 처리하여 튕김 방지)
+            try:
+                info = yf.Ticker(ticker).fast_info
+                # fast_info 사용으로 속도 최적화
+                trail_pe = getattr(info, 'trailing_pe', None)
+                fwd_pe = getattr(info, 'forward_pe', None)
+            except Exception:
+                trail_pe, fwd_pe = None, None
 
-            # 펀더멘털 PER 정보
-            info = stock.info
-            trail_pe = info.get('trailingPE')
-            fwd_pe = info.get('forwardPE')
-            name = info.get('shortName', ticker)
-
-            # PER 개선 여부
             pe_improving = bool(fwd_pe and trail_pe and fwd_pe < trail_pe)
 
             all_data.append({
                 "티커": ticker,
-                "종목명": name,
+                "종목명": ticker, # 속도 최적화를 위해 티커명 우선 사용
                 "현재가": round(price, 2),
                 "SMA9": round(sma9, 2),
                 "SMA20": round(sma20, 2),
@@ -89,13 +87,10 @@ def fetch_and_process_data(tickers):
         except Exception:
             continue
 
-    progress_bar.empty()
-    status_text.empty()
-
     return pd.DataFrame(all_data)
 
 # ------------------------------------------------------------------
-# 사이드바 (Sidebar) - 대상 선택 및 지정 입력 옵션
+# 사이드바
 # ------------------------------------------------------------------
 st.sidebar.header("⚙️ 스크리닝 대상 설정")
 mode = st.sidebar.radio(
@@ -112,15 +107,11 @@ else:
         value="TSLA, PLTR, NVDA, AMD, QQQ, SPY, COIN",
         height=120
     )
-    # 쉼표나 줄바꿈 기준으로 티커 분리
     target_tickers = [t.strip() for t in custom_input.replace('\n', ',').split(',') if t.strip()]
     st.sidebar.success(f"입력된 {len(target_tickers)}개 종목을 분석합니다.")
 
-# 데이터 실행
-if target_tickers:
-    df = fetch_and_process_data(target_tickers)
-else:
-    df = pd.DataFrame()
+# 데이터 수집 실행
+df = fetch_and_process_data_fast(target_tickers)
 
 # 상단 알림 및 갱신 버튼
 st.success(f"총 {len(df)}개 종목 분석 완료!")
@@ -133,7 +124,7 @@ if df.empty:
     st.stop()
 
 # ------------------------------------------------------------------
-# 탭 구성 (모바일 최적화 세로 1열 구조)
+# 탭 구성 (모바일 최적화)
 # ------------------------------------------------------------------
 tab1, tab2, tab3 = st.tabs([
     "🏆 전략 1: 미너비니 정배열", 
@@ -152,7 +143,7 @@ with tab1:
         (df["SMA50"] < df["SMA20"]) & 
         df["PER_개선"]
     )
-    res1 = df[cond1][["티커", "종목명", "현재가", "SMA20", "SMA50", "SMA100", "SMA200", "Trailing_PE", "Forward_PE"]]
+    res1 = df[cond1][["티커", "현재가", "SMA20", "SMA50", "SMA100", "SMA200", "Trailing_PE", "Forward_PE"]]
     
     if not res1.empty:
         st.dataframe(res1, use_container_width=True)
@@ -171,7 +162,7 @@ with tab2:
         (df["현재가"] > df["SMA9"]) &
         df["PER_개선"]
     )
-    res2 = df[cond2][["티커", "종목명", "현재가", "SMA9", "SMA20", "SMA50", "Trailing_PE", "Forward_PE"]]
+    res2 = df[cond2][["티커", "현재가", "SMA9", "SMA20", "SMA50", "Trailing_PE", "Forward_PE"]]
     
     if not res2.empty:
         st.dataframe(res2, use_container_width=True)
@@ -186,7 +177,7 @@ with tab3:
     st.markdown("### 🔹 200일선 근접 (장기 지지선)")
     near_200 = df[df["diff_sma200"] <= 3.0].sort_values(by="diff_sma200")
     if not near_200.empty:
-        st.dataframe(near_200[["티커", "종목명", "현재가", "SMA200", "Forward_PE"]], use_container_width=True)
+        st.dataframe(near_200[["티커", "현재가", "SMA200", "Forward_PE"]], use_container_width=True)
     else:
         st.write("근접 종목 없음")
     st.divider()
@@ -194,7 +185,7 @@ with tab3:
     st.markdown("### 🔹 100일선 근접 (중장기 허리선)")
     near_100 = df[df["diff_sma100"] <= 3.0].sort_values(by="diff_sma100")
     if not near_100.empty:
-        st.dataframe(near_100[["티커", "종목명", "현재가", "SMA100", "Forward_PE"]], use_container_width=True)
+        st.dataframe(near_100[["티커", "현재가", "SMA100", "Forward_PE"]], use_container_width=True)
     else:
         st.write("근접 종목 없음")
     st.divider()
@@ -202,7 +193,7 @@ with tab3:
     st.markdown("### 🔹 50일선 근접 (기관 수급선)")
     near_50 = df[df["diff_sma50"] <= 3.0].sort_values(by="diff_sma50")
     if not near_50.empty:
-        st.dataframe(near_50[["티커", "종목명", "현재가", "SMA50", "Forward_PE"]], use_container_width=True)
+        st.dataframe(near_50[["티커", "현재가", "SMA50", "Forward_PE"]], use_container_width=True)
     else:
         st.write("근접 종목 없음")
     st.divider()
@@ -210,7 +201,7 @@ with tab3:
     st.markdown("### 🔹 20일선 근접 (단기 생명선)")
     near_20 = df[df["diff_sma20"] <= 3.0].sort_values(by="diff_sma20")
     if not near_20.empty:
-        st.dataframe(near_20[["티커", "종목명", "현재가", "SMA20", "Forward_PE"]], use_container_width=True)
+        st.dataframe(near_20[["티커", "현재가", "SMA20", "Forward_PE"]], use_container_width=True)
     else:
         st.write("근접 종목 없음")
     st.divider()
@@ -218,6 +209,6 @@ with tab3:
     st.markdown("### 🔹 9일선 근접 (극단기 모멘텀선)")
     near_9 = df[df["diff_sma9"] <= 3.0].sort_values(by="diff_sma9")
     if not near_9.empty:
-        st.dataframe(near_9[["티커", "종목명", "현재가", "SMA9", "Forward_PE"]], use_container_width=True)
+        st.dataframe(near_9[["티커", "현재가", "SMA9", "Forward_PE"]], use_container_width=True)
     else:
         st.write("근접 종목 없음")
