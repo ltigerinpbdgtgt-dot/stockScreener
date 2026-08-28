@@ -9,18 +9,18 @@ st.set_page_config(page_title="맞춤형 & S&P 500 퀀트 스크리너", page_ic
 st.title("📈 커스텀 & S&P 500 퀀트 스크리너 대시보드")
 st.caption("대가들의 매매 전략(Minervini, O'Neil, Williams) 기반 맞춤형 분석 시스템")
 
-# 2. 로컬 CSV 파일에서 S&P 500 전체 종목 불러오기
+# 2. 지정 파일(portfolio.csv) 또는 S&P 500 로컬 파일 불러오기 함수
 @st.cache_data(ttl=86400)
-def get_sp500_tickers():
-    csv_file = "sp500_tickers.csv"
-    if os.path.exists(csv_file):
+def load_tickers_from_file(file_path):
+    if os.path.exists(file_path):
         try:
-            df = pd.read_csv(csv_file)
-            tickers = df['Symbol'].dropna().str.strip().str.replace('.', '-', regex=False).tolist()
+            df = pd.read_csv(file_path)
+            first_col = df.columns[0]
+            tickers = df[first_col].dropna().astype(str).str.strip().str.replace('.', '-', regex=False).tolist()
             return tickers
         except Exception:
             pass
-    return ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "BRK-B", "TSLA", "AVGO", "LLY"]
+    return []
 
 # 3. 고속 일괄(Batch) 데이터 수집 및 이평선 계산 함수
 @st.cache_data(ttl=3600)
@@ -86,35 +86,47 @@ def fetch_and_process_data_fast(tickers):
     return pd.DataFrame(all_data)
 
 # ------------------------------------------------------------------
-# 사이드바 설정 (3가지 모드 지원)
+# 사이드바 설정 (portfolio.csv 우선 탐색 처리)
 # ------------------------------------------------------------------
 st.sidebar.header("⚙️ 스크리닝 대상 설정")
-mode = st.sidebar.radio(
-    "분석 방식을 선택하세요:",
-    ("S&P 500 전체 종목", "📁 CSV 파일 업로드", "✏️ 직접 텍스트 입력")
-)
+
+# 깃허브 저장소의 portfolio.csv 파일 자동 체크
+portfolio_path = "portfolio.csv"
+has_portfolio = os.path.exists(portfolio_path)
+
+if has_portfolio:
+    options = ("📂 지정 파일 (portfolio.csv)", "S&P 500 전체 종목", "📁 직접 CSV 파일 업로드", "✏️ 텍스트 입력")
+else:
+    options = ("S&P 500 전체 종목", "📁 직접 CSV 파일 업로드", "✏️ 텍스트 입력")
+
+mode = st.sidebar.radio("분석 방식을 선택하세요:", options)
 
 target_tickers = []
 
-if mode == "S&P 500 전체 종목":
-    target_tickers = get_sp500_tickers()
-    st.sidebar.info(f"S&P 500 구성 종목 {len(target_tickers)}개를 전체 분석합니다.")
+if mode == "📂 지정 파일 (portfolio.csv)":
+    target_tickers = load_tickers_from_file(portfolio_path)
+    st.sidebar.success(f"깃허브 `portfolio.csv`에서 {len(target_tickers)}개 종목을 불러왔습니다.")
 
-elif mode == "📁 CSV 파일 업로드":
+elif mode == "S&P 500 전체 종목":
+    target_tickers = load_tickers_from_file("sp500_tickers.csv")
+    if not target_tickers:
+        target_tickers = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "BRK-B", "TSLA", "AVGO", "LLY"]
+    st.sidebar.info(f"S&P 500 구성 종목 {len(target_tickers)}개를 분석합니다.")
+
+elif mode == "📁 직접 CSV 파일 업로드":
     uploaded_file = st.sidebar.file_uploader("티커가 담긴 CSV 파일을 올려주세요", type=["csv"])
     if uploaded_file is not None:
         try:
-            # 첫 번째 열(Column)에 있는 티커 목록 자동 인식
             user_df = pd.read_csv(uploaded_file)
             first_col = user_df.columns[0]
-            target_tickers = user_df[first_col].dropna().astype(str).str.strip().tolist()
+            target_tickers = user_df[first_col].dropna().astype(str).str.strip().str.replace('.', '-', regex=False).tolist()
             st.sidebar.success(f"파일에서 {len(target_tickers)}개 티커를 읽었습니다.")
-        except Exception as e:
+        except Exception:
             st.sidebar.error("파일을 읽는 중 오류가 발생했습니다.")
     else:
-        st.sidebar.caption("💡 첫 번째 열에 티커 목록(Symbol 또는 Ticker)이 담긴 CSV 파일을 업로드하세요.")
+        st.sidebar.caption("💡 첫 번째 열에 티커 목록이 담긴 CSV 파일을 업로드하세요.")
 
-else: # 직접 텍스트 입력
+else: # 텍스트 입력
     custom_input = st.sidebar.text_area(
         "티커를 쉼표(,)나 줄바꿈으로 구분해 입력하세요:",
         value="TSLA, PLTR, NVDA, AMD, QQQ, SPY, COIN",
@@ -123,7 +135,7 @@ else: # 직접 텍스트 입력
     target_tickers = [t.strip() for t in custom_input.replace('\n', ',').split(',') if t.strip()]
     st.sidebar.success(f"입력된 {len(target_tickers)}개 종목을 분석합니다.")
 
-# 데이터 실행
+# 데이터 수집 및 분석 실행
 if target_tickers:
     df = fetch_and_process_data_fast(target_tickers)
 else:
@@ -136,14 +148,14 @@ if not df.empty:
         st.cache_data.clear()
         st.rerun()
 else:
-    if mode == "📁 CSV 파일 업로드" and target_tickers == []:
+    if mode == "📁 직접 CSV 파일 업로드" and not target_tickers:
         st.info("좌측 사이드바에서 CSV 파일을 업로드해주세요.")
     else:
         st.warning("분석할 종목 데이터가 없거나 수집 중 오류가 발생했습니다.")
     st.stop()
 
 # ------------------------------------------------------------------
-# 탭 구성 (모바일 최적화 세로 1열 배치)
+# 탭 구성
 # ------------------------------------------------------------------
 tab1, tab2, tab3 = st.tabs([
     "🏆 전략 1: 미너비니 정배열", 
@@ -153,35 +165,32 @@ tab1, tab2, tab3 = st.tabs([
 
 # TAB 1: 미너비니 정배열
 with tab1:
-    st.subheader("전략 1. 미너비니 트렌드 템플릿 (완전 정배열 주도주)")
-    st.caption("**조건**: `200일 < 100일 < 50일 < 20일` AND `Forward PER < Trailing PER`")
+    st.subheader("전략 1. 미너비니 트렌드 템플릿 (상승 추세 정배열)")
+    st.caption("**조건**: `200일선 < 50일선 < 20일선` (장·중·단기 정배열) AND `주가 > 50일선`")
     
     cond1 = (
-        (df["SMA200"] < df["SMA100"]) & 
-        (df["SMA100"] < df["SMA50"]) & 
-        (df["SMA50"] < df["SMA20"]) & 
-        df["PER_개선"]
+        (df["SMA200"] < df["SMA50"]) & 
+        (df["SMA50"] < df["SMA20"]) &
+        (df["현재가"] > df["SMA50"])
     )
-    res1 = df[cond1][["티커", "현재가", "SMA20", "SMA50", "SMA100", "SMA200", "Trailing_PE", "Forward_PE"]]
+    res1 = df[cond1][["티커", "현재가", "SMA20", "SMA50", "SMA200", "PER_개선", "Trailing_PE", "Forward_PE"]]
     
     if not res1.empty:
         st.dataframe(res1, use_container_width=True)
     else:
-        st.info("현재 완전 정배열 조건과 PER 개선을 동시에 만족하는 종목이 없습니다.")
+        st.info("현재 상승 추세 정배열 조건을 만족하는 종목이 없습니다.")
 
 # TAB 2: 오닐 눌림목 반등
 with tab2:
     st.subheader("전략 2. 오닐 & 와인스타인 눌림목 반등 타점")
-    st.caption("**조건**: `200일 < 100일 < 50일` (장기 우상향) AND `9일선 > 20일선` (단기 반등) AND `Forward PER 개선`")
+    st.caption("**조건**: `200일선 < 50일선` (우상향 추세) AND `9일선 > 20일선` (단기 반등 골든크로스) AND `주가 > 9일선`")
     
     cond2 = (
-        (df["SMA200"] < df["SMA100"]) & 
-        (df["SMA100"] < df["SMA50"]) & 
+        (df["SMA200"] < df["SMA50"]) & 
         (df["SMA9"] > df["SMA20"]) & 
-        (df["현재가"] > df["SMA9"]) &
-        df["PER_개선"]
+        (df["현재가"] > df["SMA9"])
     )
-    res2 = df[cond2][["티커", "현재가", "SMA9", "SMA20", "SMA50", "Trailing_PE", "Forward_PE"]]
+    res2 = df[cond2][["티커", "현재가", "SMA9", "SMA20", "SMA50", "PER_개선", "Trailing_PE", "Forward_PE"]]
     
     if not res2.empty:
         st.dataframe(res2, use_container_width=True)
