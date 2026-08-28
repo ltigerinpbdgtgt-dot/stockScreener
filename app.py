@@ -20,7 +20,6 @@ def get_sp500_tickers():
             return tickers
         except Exception:
             pass
-    # 파일이 없거나 읽기 실패 시 예외용 기본 리스트
     return ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "BRK-B", "TSLA", "AVGO", "LLY"]
 
 # 3. 고속 일괄(Batch) 데이터 수집 및 이평선 계산 함수
@@ -29,7 +28,7 @@ def fetch_and_process_data_fast(tickers):
     if not tickers:
         return pd.DataFrame()
 
-    with st.spinner(f"총 {len(tickers)}개 종목 데이터를 분석 중입니다... (약 10~20초 소요)"):
+    with st.spinner(f"총 {len(tickers)}개 종목 데이터를 분석 중입니다..."):
         df_hist = yf.download(tickers, period="1y", group_by="ticker", threads=True, progress=False)
 
     all_data = []
@@ -87,36 +86,60 @@ def fetch_and_process_data_fast(tickers):
     return pd.DataFrame(all_data)
 
 # ------------------------------------------------------------------
-# 사이드바
+# 사이드바 설정 (3가지 모드 지원)
 # ------------------------------------------------------------------
 st.sidebar.header("⚙️ 스크리닝 대상 설정")
 mode = st.sidebar.radio(
-    "분석할 대상을 선택하세요:",
-    ("S&P 500 전체 종목", "직접 티커 입력하기")
+    "분석 방식을 선택하세요:",
+    ("S&P 500 전체 종목", "📁 CSV 파일 업로드", "✏️ 직접 텍스트 입력")
 )
+
+target_tickers = []
 
 if mode == "S&P 500 전체 종목":
     target_tickers = get_sp500_tickers()
     st.sidebar.info(f"S&P 500 구성 종목 {len(target_tickers)}개를 전체 분석합니다.")
-else:
+
+elif mode == "📁 CSV 파일 업로드":
+    uploaded_file = st.sidebar.file_uploader("티커가 담긴 CSV 파일을 올려주세요", type=["csv"])
+    if uploaded_file is not None:
+        try:
+            # 첫 번째 열(Column)에 있는 티커 목록 자동 인식
+            user_df = pd.read_csv(uploaded_file)
+            first_col = user_df.columns[0]
+            target_tickers = user_df[first_col].dropna().astype(str).str.strip().tolist()
+            st.sidebar.success(f"파일에서 {len(target_tickers)}개 티커를 읽었습니다.")
+        except Exception as e:
+            st.sidebar.error("파일을 읽는 중 오류가 발생했습니다.")
+    else:
+        st.sidebar.caption("💡 첫 번째 열에 티커 목록(Symbol 또는 Ticker)이 담긴 CSV 파일을 업로드하세요.")
+
+else: # 직접 텍스트 입력
     custom_input = st.sidebar.text_area(
-        "분석할 티커를 쉼표(,)로 구분해 입력하세요:",
+        "티커를 쉼표(,)나 줄바꿈으로 구분해 입력하세요:",
         value="TSLA, PLTR, NVDA, AMD, QQQ, SPY, COIN",
         height=120
     )
     target_tickers = [t.strip() for t in custom_input.replace('\n', ',').split(',') if t.strip()]
     st.sidebar.success(f"입력된 {len(target_tickers)}개 종목을 분석합니다.")
 
-# 데이터 수집 실행
-df = fetch_and_process_data_fast(target_tickers)
+# 데이터 실행
+if target_tickers:
+    df = fetch_and_process_data_fast(target_tickers)
+else:
+    df = pd.DataFrame()
 
-st.success(f"총 {len(df)}개 종목 분석 완료!")
-if st.button("🔄 데이터 강제 갱신", use_container_width=True):
-    st.cache_data.clear()
-    st.rerun()
-
-if df.empty:
-    st.warning("분석할 종목 데이터가 없거나 수집 중 오류가 발생했습니다.")
+# 상단 알림 및 갱신 버튼
+if not df.empty:
+    st.success(f"총 {len(df)}개 종목 분석 완료!")
+    if st.button("🔄 데이터 강제 갱신", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
+else:
+    if mode == "📁 CSV 파일 업로드" and target_tickers == []:
+        st.info("좌측 사이드바에서 CSV 파일을 업로드해주세요.")
+    else:
+        st.warning("분석할 종목 데이터가 없거나 수집 중 오류가 발생했습니다.")
     st.stop()
 
 # ------------------------------------------------------------------
