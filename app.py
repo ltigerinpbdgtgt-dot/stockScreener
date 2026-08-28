@@ -1,6 +1,7 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
+import os
 
 # 1. 페이지 설정
 st.set_page_config(page_title="맞춤형 & S&P 500 퀀트 스크리너", page_icon="📈", layout="wide")
@@ -8,17 +9,19 @@ st.set_page_config(page_title="맞춤형 & S&P 500 퀀트 스크리너", page_ic
 st.title("📈 커스텀 & S&P 500 퀀트 스크리너 대시보드")
 st.caption("대가들의 매매 전략(Minervini, O'Neil, Williams) 기반 맞춤형 분석 시스템")
 
-# 2. S&P 500 전체 종목 수집 함수
+# 2. 로컬 CSV 파일에서 S&P 500 전체 종목 불러오기
 @st.cache_data(ttl=86400)
 def get_sp500_tickers():
-    try:
-        url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
-        tables = pd.read_html(url)
-        df = tables[0]
-        tickers = df['Symbol'].str.replace('.', '-', regex=False).tolist()
-        return tickers
-    except Exception:
-        return ["MSFT", "GOOGL", "AAPL", "AMZN", "NVDA", "V", "AMAT", "LLY", "JNJ", "PG"]
+    csv_file = "sp500_tickers.csv"
+    if os.path.exists(csv_file):
+        try:
+            df = pd.read_csv(csv_file)
+            tickers = df['Symbol'].dropna().str.strip().str.replace('.', '-', regex=False).tolist()
+            return tickers
+        except Exception:
+            pass
+    # 파일이 없거나 읽기 실패 시 예외용 기본 리스트
+    return ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "BRK-B", "TSLA", "AVGO", "LLY"]
 
 # 3. 고속 일괄(Batch) 데이터 수집 및 이평선 계산 함수
 @st.cache_data(ttl=3600)
@@ -26,8 +29,7 @@ def fetch_and_process_data_fast(tickers):
     if not tickers:
         return pd.DataFrame()
 
-    with st.spinner(f"총 {len(tickers)}개 종목 데이터를 일괄 수집 중입니다... (약 10~20초 소요)"):
-        # 500개 종목 차트 데이터를 한 번에 통째로 다운로드 (차단 방지 핵심)
+    with st.spinner(f"총 {len(tickers)}개 종목 데이터를 분석 중입니다... (약 10~20초 소요)"):
         df_hist = yf.download(tickers, period="1y", group_by="ticker", threads=True, progress=False)
 
     all_data = []
@@ -35,7 +37,6 @@ def fetch_and_process_data_fast(tickers):
     for ticker in tickers:
         ticker = ticker.strip().upper()
         try:
-            # 단일 종목 또는 다중 종목 데이터 분기 처리
             if len(tickers) == 1:
                 stock_data = df_hist
             else:
@@ -43,7 +44,6 @@ def fetch_and_process_data_fast(tickers):
                     continue
                 stock_data = df_hist[ticker]
 
-            # 종가(Close) 데이터 추출 및 결측치 제거
             close = stock_data['Close'].dropna()
             if len(close) < 200:
                 continue
@@ -55,10 +55,8 @@ def fetch_and_process_data_fast(tickers):
             sma20  = float(close.rolling(20).mean().iloc[-1])
             sma9   = float(close.rolling(9).mean().iloc[-1])
 
-            # PER 정보 추출 (실패 시 기본값 처리하여 튕김 방지)
             try:
                 info = yf.Ticker(ticker).fast_info
-                # fast_info 사용으로 속도 최적화
                 trail_pe = getattr(info, 'trailing_pe', None)
                 fwd_pe = getattr(info, 'forward_pe', None)
             except Exception:
@@ -68,7 +66,6 @@ def fetch_and_process_data_fast(tickers):
 
             all_data.append({
                 "티커": ticker,
-                "종목명": ticker, # 속도 최적화를 위해 티커명 우선 사용
                 "현재가": round(price, 2),
                 "SMA9": round(sma9, 2),
                 "SMA20": round(sma20, 2),
@@ -113,18 +110,17 @@ else:
 # 데이터 수집 실행
 df = fetch_and_process_data_fast(target_tickers)
 
-# 상단 알림 및 갱신 버튼
 st.success(f"총 {len(df)}개 종목 분석 완료!")
 if st.button("🔄 데이터 강제 갱신", use_container_width=True):
     st.cache_data.clear()
     st.rerun()
 
 if df.empty:
-    st.warning("분석할 종목 데이터가 없거나 수집 중 오류가 발생했습니다. 티커를 확인해주세요.")
+    st.warning("분석할 종목 데이터가 없거나 수집 중 오류가 발생했습니다.")
     st.stop()
 
 # ------------------------------------------------------------------
-# 탭 구성 (모바일 최적화)
+# 탭 구성 (모바일 최적화 세로 1열 배치)
 # ------------------------------------------------------------------
 tab1, tab2, tab3 = st.tabs([
     "🏆 전략 1: 미너비니 정배열", 
@@ -132,7 +128,7 @@ tab1, tab2, tab3 = st.tabs([
     "📍 전략 3: 이평선별 근접 종목"
 ])
 
-# TAB 1: 미너비니 트렌드 템플릿
+# TAB 1: 미너비니 정배열
 with tab1:
     st.subheader("전략 1. 미너비니 트렌드 템플릿 (완전 정배열 주도주)")
     st.caption("**조건**: `200일 < 100일 < 50일 < 20일` AND `Forward PER < Trailing PER`")
@@ -150,7 +146,7 @@ with tab1:
     else:
         st.info("현재 완전 정배열 조건과 PER 개선을 동시에 만족하는 종목이 없습니다.")
 
-# TAB 2: 오닐/와인스타인 눌림목 반등
+# TAB 2: 오닐 눌림목 반등
 with tab2:
     st.subheader("전략 2. 오닐 & 와인스타인 눌림목 반등 타점")
     st.caption("**조건**: `200일 < 100일 < 50일` (장기 우상향) AND `9일선 > 20일선` (단기 반등) AND `Forward PER 개선`")
