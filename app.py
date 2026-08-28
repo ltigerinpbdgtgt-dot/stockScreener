@@ -9,14 +9,26 @@ st.set_page_config(page_title="맞춤형 & S&P 500 퀀트 스크리너", page_ic
 st.title("📈 커스텀 & S&P 500 퀀트 스크리너 대시보드")
 st.caption("대가들의 매매 전략(Minervini, O'Neil, Williams) 기반 맞춤형 분석 시스템")
 
-# 2. 지정 파일(portfolio.csv) 또는 S&P 500 로컬 파일 불러오기 함수
+# 2. 지정 파일 또는 로컬 CSV 불러오기 함수 ('#' 주석 자동 패스)
 @st.cache_data(ttl=86400)
 def load_tickers_from_file(file_path):
     if os.path.exists(file_path):
         try:
-            df = pd.read_csv(file_path)
+            # comment='#' 옵션으로 #으로 시작하는 줄 자동 스킵
+            df = pd.read_csv(file_path, comment='#')
             first_col = df.columns[0]
-            tickers = df[first_col].dropna().astype(str).str.strip().str.replace('.', '-', regex=False).tolist()
+            
+            tickers = (
+                df[first_col]
+                .dropna()
+                .astype(str)
+                .str.strip()
+                .str.replace('.', '-', regex=False)
+                .tolist()
+            )
+            
+            # 혹시 남아있는 '#' 시작 라인 2차 필터링
+            tickers = [t for t in tickers if t and not t.startswith('#')]
             return tickers
         except Exception:
             pass
@@ -157,22 +169,32 @@ elif mode == "📁 직접 CSV 파일 업로드":
     uploaded_file = st.sidebar.file_uploader("티커가 담긴 CSV 파일을 올려주세요", type=["csv"])
     if uploaded_file is not None:
         try:
-            user_df = pd.read_csv(uploaded_file)
+            # 업로드한 파일에서도 comment='#' 적용
+            user_df = pd.read_csv(uploaded_file, comment='#')
             first_col = user_df.columns[0]
-            target_tickers = user_df[first_col].dropna().astype(str).str.strip().str.replace('.', '-', regex=False).tolist()
+            target_tickers = (
+                user_df[first_col]
+                .dropna()
+                .astype(str)
+                .str.strip()
+                .str.replace('.', '-', regex=False)
+                .tolist()
+            )
+            target_tickers = [t for t in target_tickers if t and not t.startswith('#')]
             st.sidebar.success(f"파일에서 {len(target_tickers)}개 티커를 읽었습니다.")
         except Exception:
             st.sidebar.error("파일을 읽는 중 오류가 발생했습니다.")
     else:
-        st.sidebar.caption("💡 첫 번째 열에 티커 목록이 담긴 CSV 파일을 업로드하세요.")
+        st.sidebar.caption("💡 첫 번째 열에 티커 목록이 담긴 CSV 파일을 업로드하세요. (# 주석 무시)")
 
 else: # 텍스트 입력
     custom_input = st.sidebar.text_area(
-        "티커를 쉼표(,)나 줄바꿈으로 구분해 입력하세요:",
+        "티커를 쉼표(,)나 줄바꿈으로 구분해 입력하세요 (# 주석 가능):",
         value="TSLA, PLTR, NVDA, AMD, QQQ, SPY, COIN",
         height=120
     )
-    target_tickers = [t.strip() for t in custom_input.replace('\n', ',').split(',') if t.strip()]
+    raw_lines = custom_input.replace('\n', ',').split(',')
+    target_tickers = [t.strip() for t in raw_lines if t.strip() and not t.strip().startswith('#')]
     st.sidebar.success(f"입력된 {len(target_tickers)}개 종목을 분석합니다.")
 
 # 데이터 수집 및 분석 실행
