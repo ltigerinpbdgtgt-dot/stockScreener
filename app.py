@@ -63,27 +63,26 @@ def fetch_and_process_data_fast(tickers):
 
             pe_improving = bool(fwd_pe and trail_pe and fwd_pe < trail_pe)
 
-            # ------------------------------------------------------------------
-            # 5대 국면 분류 로직 (전체 종목 커버)
-            # ------------------------------------------------------------------
-            # 1) 주도주 정배열: 장·중·단기 우상향
+            # 5대 국면 분류 로직
             if (sma200 < sma50) and (sma50 < sma20) and (price > sma50):
                 phase = "🟢 [그룹 1] 주도주 정배열"
-            # 2) 눌림목 후 단기 반등: 장기 우상향 + 9일선 골든크로스 반등
             elif (sma200 < sma50) and (sma9 > sma20) and (price > sma9):
                 phase = "🎯 [그룹 2] 눌림목 반등"
-            # 3) 조정 관망 대기: 장기 우상향이나 단기 조정 중 (주요 관심종목)
             elif (sma200 < sma50) and (price <= sma20 or sma9 <= sma20):
                 phase = "🟡 [그룹 3] 조정 관망대기"
-            # 4) 바닥 탈출 / 턴어라운드: 장기 역배열이나 단기 반등 시작
             elif (sma50 < sma200) and (price > sma20 and sma9 > sma20):
                 phase = "🟠 [그룹 4] 바닥 탈출/턴어라운드"
-            # 5) 완전 역배열 / 하락 추세: 위험 구간
             else:
                 phase = "🔴 [그룹 5] 완벽한 역배열/하락세"
 
+            # 외부 사이트 링크 생성
+            yahoo_link = f"https://finance.yahoo.com/quote/{ticker}"
+            seeking_alpha_link = f"https://seekingalpha.com/symbol/{ticker}"
+
             all_data.append({
                 "티커": ticker,
+                "Yahoo": yahoo_link,
+                "SeekingAlpha": seeking_alpha_link,
                 "현재가": round(price, 2),
                 "국면분류": phase,
                 "SMA9": round(sma9, 2),
@@ -104,6 +103,28 @@ def fetch_and_process_data_fast(tickers):
             continue
 
     return pd.DataFrame(all_data)
+
+# ------------------------------------------------------------------
+# 공통 테이블 출력 함수 (링크 컬럼 설정 적용)
+# ------------------------------------------------------------------
+def display_styled_dataframe(df_to_show, columns_to_display):
+    column_config = {
+        "Yahoo": st.column_config.LinkColumn(
+            "Yahoo",
+            display_text="📈 야후",
+            help="야후 파이낸스 차트 및 상세 정보로 이동합니다."
+        ),
+        "SeekingAlpha": st.column_config.LinkColumn(
+            "SeekingAlpha",
+            display_text="📰 시킹알파",
+            help="시킹알파 뉴스 및 기업 분석 정보로 이동합니다."
+        )
+    }
+    st.dataframe(
+        df_to_show[columns_to_display],
+        column_config=column_config,
+        use_container_width=True
+    )
 
 # ------------------------------------------------------------------
 # 사이드바 설정
@@ -174,7 +195,7 @@ else:
     st.stop()
 
 # ------------------------------------------------------------------
-# 탭 구성 (탭 4 추가)
+# 탭 구성
 # ------------------------------------------------------------------
 tab1, tab2, tab3, tab4 = st.tabs([
     "🏆 전략 1: 미너비니 정배열", 
@@ -188,11 +209,11 @@ with tab1:
     st.subheader("전략 1. 미너비니 트렌드 템플릿 (상승 추세 정배열)")
     st.caption("**조건**: `200일선 < 50일선 < 20일선` (장·중·단기 정배열) AND `주가 > 50일선`")
     
-    cond1 = (df["국면분류"] == "🟢 [그룹 1] 주도주 정배열")
-    res1 = df[cond1][["티커", "현재가", "SMA20", "SMA50", "SMA200", "PER_개선", "Trailing_PE", "Forward_PE"]]
+    res1 = df[df["국면분류"] == "🟢 [그룹 1] 주도주 정배열"]
+    cols = ["티커", "Yahoo", "SeekingAlpha", "현재가", "SMA20", "SMA50", "SMA200", "PER_개선", "Trailing_PE", "Forward_PE"]
     
     if not res1.empty:
-        st.dataframe(res1, use_container_width=True)
+        display_styled_dataframe(res1, cols)
     else:
         st.info("현재 상승 추세 정배열 조건을 만족하는 종목이 없습니다.")
 
@@ -201,11 +222,11 @@ with tab2:
     st.subheader("전략 2. 오닐 & 와인스타인 눌림목 반등 타점")
     st.caption("**조건**: `200일선 < 50일선` (우상향 추세) AND `9일선 > 20일선` (단기 반등 골든크로스) AND `주가 > 9일선`")
     
-    cond2 = (df["국면분류"] == "🎯 [그룹 2] 눌림목 반등")
-    res2 = df[cond2][["티커", "현재가", "SMA9", "SMA20", "SMA50", "PER_개선", "Trailing_PE", "Forward_PE"]]
+    res2 = df[df["국면분류"] == "🎯 [그룹 2] 눌림목 반등"]
+    cols = ["티커", "Yahoo", "SeekingAlpha", "현재가", "SMA9", "SMA20", "SMA50", "PER_개선", "Trailing_PE", "Forward_PE"]
     
     if not res2.empty:
-        st.dataframe(res2, use_container_width=True)
+        display_styled_dataframe(res2, cols)
     else:
         st.info("현재 눌림목 후 단기 반등 조건을 만족하는 종목이 없습니다.")
 
@@ -214,10 +235,12 @@ with tab3:
     st.subheader("전략 3. 각 이동평균선 근처(±3% 이내) 종목")
     st.caption("주가가 이동평균선에 바짝 붙은 종목을 모바일 화면에 맞춰 순차적으로 보여줍니다.")
 
+    cols_tab3 = ["티커", "Yahoo", "SeekingAlpha", "현재가", "국면분류", "Forward_PE"]
+
     st.markdown("### 🔹 200일선 근접 (장기 지지선)")
     near_200 = df[df["diff_sma200"] <= 3.0].sort_values(by="diff_sma200")
     if not near_200.empty:
-        st.dataframe(near_200[["티커", "현재가", "국면분류", "SMA200", "Forward_PE"]], use_container_width=True)
+        display_styled_dataframe(near_200, cols_tab3 + ["SMA200"])
     else:
         st.write("근접 종목 없음")
     st.divider()
@@ -225,7 +248,7 @@ with tab3:
     st.markdown("### 🔹 100일선 근접 (중장기 허리선)")
     near_100 = df[df["diff_sma100"] <= 3.0].sort_values(by="diff_sma100")
     if not near_100.empty:
-        st.dataframe(near_100[["티커", "현재가", "국면분류", "SMA100", "Forward_PE"]], use_container_width=True)
+        display_styled_dataframe(near_100, cols_tab3 + ["SMA100"])
     else:
         st.write("근접 종목 없음")
     st.divider()
@@ -233,7 +256,7 @@ with tab3:
     st.markdown("### 🔹 50일선 근접 (기관 수급선)")
     near_50 = df[df["diff_sma50"] <= 3.0].sort_values(by="diff_sma50")
     if not near_50.empty:
-        st.dataframe(near_50[["티커", "현재가", "국면분류", "SMA50", "Forward_PE"]], use_container_width=True)
+        display_styled_dataframe(near_50, cols_tab3 + ["SMA50"])
     else:
         st.write("근접 종목 없음")
     st.divider()
@@ -241,7 +264,7 @@ with tab3:
     st.markdown("### 🔹 20일선 근접 (단기 생명선)")
     near_20 = df[df["diff_sma20"] <= 3.0].sort_values(by="diff_sma20")
     if not near_20.empty:
-        st.dataframe(near_20[["티커", "현재가", "국면분류", "SMA20", "Forward_PE"]], use_container_width=True)
+        display_styled_dataframe(near_20, cols_tab3 + ["SMA20"])
     else:
         st.write("근접 종목 없음")
     st.divider()
@@ -249,16 +272,15 @@ with tab3:
     st.markdown("### 🔹 9일선 근접 (극단기 모멘텀선)")
     near_9 = df[df["diff_sma9"] <= 3.0].sort_values(by="diff_sma9")
     if not near_9.empty:
-        st.dataframe(near_9[["티커", "현재가", "국면분류", "SMA9", "Forward_PE"]], use_container_width=True)
+        display_styled_dataframe(near_9, cols_tab3 + ["SMA9"])
     else:
         st.write("근접 종목 없음")
 
-# TAB 4: 시장 국면 종합 분류 및 건강도 분석 (새로 추가)
+# TAB 4: 시장 국면 종합 분류 및 건강도 분석
 with tab4:
     st.subheader("📊 시장 국면 종합 분석 & 건강도 지표")
     st.caption("전체 분석 대상 종목을 5가지 국면으로 나누어 시장 전체의 매수/관망/하락 에너지를 파악합니다.")
 
-    # 1. 국면별 요약 메트릭
     counts = df["국면분류"].value_counts()
     total_len = len(df)
 
@@ -277,7 +299,6 @@ with tab4:
 
     st.divider()
 
-    # 2. 필터링 및 전체 테이블 조회
     selected_phase = st.selectbox(
         "조회할 그룹을 선택하세요:",
         options=[
@@ -296,7 +317,5 @@ with tab4:
         filtered_df = df[df["국면분류"] == selected_phase]
 
     st.markdown(f"**해당 그룹 종목 목록 ({len(filtered_df)}개)**")
-    st.dataframe(
-        filtered_df[["티커", "국면분류", "현재가", "SMA20", "SMA50", "SMA200", "PER_개선", "Forward_PE"]],
-        use_container_width=True
-    )
+    cols_tab4 = ["티커", "Yahoo", "SeekingAlpha", "국면분류", "현재가", "SMA20", "SMA50", "SMA200", "PER_개선", "Forward_PE"]
+    display_styled_dataframe(filtered_df, cols_tab4)
