@@ -161,12 +161,19 @@ def display_styled_dataframe(df_to_show, columns_to_display):
 st.sidebar.header("⚙️ 스크리닝 대상 설정")
 
 portfolio_path = "portfolio.csv"
-has_portfolio = os.path.exists(portfolio_path)
+etf_path = "ETF.csv"
 
+has_portfolio = os.path.exists(portfolio_path)
+has_etf = os.path.exists(etf_path)
+
+# 옵션 리스트 동적 구성
+options = []
 if has_portfolio:
-    options = ("📂 지정 파일 (portfolio.csv)", "S&P 500 전체 종목", "📁 직접 CSV 파일 업로드", "✏️ 텍스트 입력")
-else:
-    options = ("S&P 500 전체 종목", "📁 직접 CSV 파일 업로드", "✏️ 텍스트 입력")
+    options.append("📂 지정 파일 (portfolio.csv)")
+if has_etf:
+    options.append("📊 ETF 목록 (ETF.csv)")
+
+options.extend(["S&P 500 전체 종목", "📁 직접 CSV 파일 업로드", "✏️ 텍스트 입력"])
 
 mode = st.sidebar.radio("분석 방식을 선택하세요:", options)
 
@@ -175,6 +182,10 @@ target_tickers = []
 if mode == "📂 지정 파일 (portfolio.csv)":
     target_tickers = load_tickers_from_file(portfolio_path)
     st.sidebar.success(f"깃허브 `portfolio.csv`에서 {len(target_tickers)}개 종목을 불러왔습니다.")
+
+elif mode == "📊 ETF 목록 (ETF.csv)":
+    target_tickers = load_tickers_from_file(etf_path)
+    st.sidebar.success(f"깃허브 `ETF.csv`에서 {len(target_tickers)}개 종목을 불러왔습니다.")
 
 elif mode == "S&P 500 전체 종목":
     target_tickers = load_tickers_from_file("sp500_tickers.csv")
