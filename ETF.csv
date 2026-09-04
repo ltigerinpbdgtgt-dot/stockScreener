@@ -1,64 +1,76 @@
 Symbol
-# Market Indices (Broad Market 1x & 2x)
-SPY
-QQQ
-IWM
-DIA
-VOO
-VTI
-SSO
-QLD
-UWM
-DDM
-# Technology & Semiconductors
+# Technology & Semiconductor Leading ETFs
+SMH
+SOXX
 XLK
 VGT
-SOXX
-SMH
-USD
 ROM
-# AI, Robotics & Innovation (ARK Funds)
-ARKK
-ARKQ
+
+# Market Indices (Broad Market 1x)
+QQQ
+SPY
+VOO
+VTI
+IWM
+DIA
+
+# AI, Robotics & ARK Innovation
 ARKW
-ARKG
+ARKQ
+ARKK
 ARKF
 ARKX
+ARKG
+
+# Healthcare & Biotechnology
+XLV
+IBB
+XBI
+CURE
+BIB
+
+# Industrials, Defense & Aerospace
+XLI
+ITA
+PPA
+
 # Finance & Banking
 XLF
 KBE
 KRE
 UYG
-# Healthcare & Biotech
-XLV
-IBB
-XBI
-BIB
-CURE
-# Consumer Discretionary & Staples
-XLY
-XLP
-UCC
+
 # Energy & Clean Energy
 XLE
 XOP
 ICLN
 TAN
 DIG
-# Industrials, Defense & Aerospace
-XLI
-ITA
-PPA
-# Real Estate & Utilities
-XLRE
-XLU
-UYR
+
+# Consumer Discretionary & Staples
+XLY
+XLP
+UCC
+
 # Communication & Media
 XLC
-# Fixed Income & Metals
-TLT
-AGG
+
+# Real Estate & Utilities
+XLU
+XLRE
+UYR
+
+# Fixed Income, Gold & Precious Metals
 GLD
+TLT
 SLV
-UBT
+AGG
 AGQ
+UBT
+
+# Market Leverage & Index 2x (High Risk)
+USD
+QLD
+SSO
+DDM
+UWM
