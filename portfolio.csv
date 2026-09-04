@@ -8,12 +8,15 @@ GOOGL
 GOOG
 META
 
-# Core Logic & Semiconductor Designers (CPU/GPU/SoC)
+# Core Logic & Semiconductor Designers (CPU/GPU/SoC/ASIC)
+AVGO
 AMD
 QCOM
 ARM
+MRVL
 
 # Semiconductor Equipment & Wafer Fab Manufacturing
+TSM
 ASML
 AMAT
 LRCX
@@ -22,12 +25,11 @@ TER
 
 # Power Grid, Data Center Cooling & Infrastructure
 ETN
+GEV
 VRT
 POWI
 FRMI
 PSIX
-HND
-HVII
 
 # AI Cloud Infrastructure & GPU Mining
 CRWV
@@ -43,6 +45,7 @@ GLW
 NBIS
 
 # Analog, Mixed-Signal & Power Semiconductors
+ADI
 TXN
 NXPI
 MPWR
@@ -69,7 +72,6 @@ WDAY
 PATH
 AI
 ZETA
-VERI
 
 # Enterprise Creative & CAD Software
 ADBE
@@ -108,9 +110,6 @@ ECHO
 # Drones & Autonomous Defense Systems
 AVAV
 RCAT
-ONDS
-PDYN
-DPRO
 
 # eVTOL & Urban Air Mobility
 ACHR
@@ -119,6 +118,8 @@ ACHR
 TSLA
 
 # Pharmaceuticals, Biotech & Gene Therapy
+LLY
+NVO
 VRTX
 REGN
 GILD
@@ -191,14 +192,9 @@ CRCL
 
 # Bitcoin Treasury & Corporate Holders
 MSTR
-BMNR
 
 # Crypto Mining & Infrastructure
-CCUP
 WULF
-
-# Sports Betting & iGaming
-SBET
 
 # Energy Equipment, Technology & Services
 BKR
@@ -216,11 +212,9 @@ XEL
 
 # Pure-Play Quantum Computing & Quantum ETF
 IONQ
-QBTS
-RGTI
-QUBT
-INFQ
 QTUM
+RGTI
+INFQ
 
 # Optical Communications, Photonics & Lasers
 COHR
