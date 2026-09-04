@@ -1,169 +1,231 @@
 Symbol
-# AI, Software & Cloud Services
-AI
-CCUP
-CRM
-CRWD
-DDOG
-INOD
-INTU
-NOW
-PATH
-PLTR
-SE
-VERI
-WDAY
-ZETA
-# Quantum Computing, Optical & Photonics
-CGEN
-COHR
-EYE
-INFQ
-IONQ
-LAES
-LASR
-LITE
-POET
-QBTS
-QTUM
-QUBT
-RGTI
-RZLV
-# Crypto, Fintech & Digital Assets
-BMNR
-COIN
-CRCL
-HOOD
-MSTR
-SBET
-WULF
-# Defense, Drones, Aerospace & Space Tech
-ACHR
-AVAV
-BKSY
-DPRO
-ECHO
-IRDM
-LDOS
-LUNR
-MDA
-ONDS
-PDYN
-PL
-RCAT
-RKLB
-SATL
-SHLD
-SPCX
-TGEN
-VSAT
-# Clean Energy, Nuclear & Power Infrastructure
-CEG
+# Big Tech & Cloud Platforms
+NVDA
+MSFT
+AAPL
+AMZN
+GOOGL
+GOOG
+META
+
+# Core Logic & Semiconductor Designers (CPU/GPU/SoC)
+AMD
+QCOM
+ARM
+
+# Semiconductor Equipment & Wafer Fab Manufacturing
+ASML
+AMAT
+LRCX
+KLAC
+TER
+
+# Power Grid, Data Center Cooling & Infrastructure
 ETN
+VRT
+POWI
 FRMI
+PSIX
 HND
 HVII
-LEU
-NNE
-OKLO
-POWI
-PSIX
-SMR
-TLN
-UUUU
-VRT
-WOLF
-# Semiconductor, Hardware & Electronics
-ALAB
-AMAT
-AMD
-APP
-ARM
-ASML
-AVGO
-CDNS
+
+# AI Cloud Infrastructure & GPU Mining
 CRWV
-FTNT
-GLW
-KLAC
-LRCX
-MCHP
-MPWR
+
+# Memory & Storage Hardware
 MU
-NBIS
-NVDA
-NVTS
-NXPI
-QCOM
-SNPS
-STX
-TER
-TXN
 WDC
-# Tech Conglomerates & Communication
-AAPL
+STX
+
+# Chip Interconnect, AI Hardware & Optical Glass
+ALAB
+GLW
+NBIS
+
+# Analog, Mixed-Signal & Power Semiconductors
+TXN
+NXPI
+MPWR
+MCHP
+WOLF
+NVTS
+
+# Cybersecurity & Network Infrastructure
+PANW
+CRWD
+FTNT
+
+# EDA Software & Semiconductor IP
+CDNS
+SNPS
+
+# Enterprise Software, Cloud & AI Solutions
+CRM
+NOW
+PLTR
+DDOG
+INTU
+WDAY
+PATH
+AI
+ZETA
+VERI
+
+# Enterprise Creative & CAD Software
 ADBE
 ADSK
-AMZN
-GOOG
-GOOGL
-META
-MSFT
-NFLX
-PANW
-# Biotech, Healthcare & Genomics
-ALNY
-AMGN
+
+# AdTech & App Monetization
+APP
+
+# Nuclear Power, Uranium & Advanced Reactors
+CEG
+TLN
+SMR
+OKLO
+LEU
+UUUU
+NNE
+
+# Defense IT, Electronics & Public Safety Tech
 AXON
+LDOS
+SHLD
+TGEN
+
+# Space Tech, Satellites & Lunar Exploration
+RKLB
+MDA
+IRDM
+PL
+VSAT
+SPCX
+LUNR
+BKSY
+SATL
+ECHO
+
+# Drones & Autonomous Defense Systems
+AVAV
+RCAT
+ONDS
+PDYN
+DPRO
+
+# eVTOL & Urban Air Mobility
+ACHR
+
+# Electric Vehicles & Clean Transport
+TSLA
+
+# Pharmaceuticals, Biotech & Gene Therapy
+VRTX
+REGN
+GILD
+AMGN
+ALNY
 CRML
+RXRX
+
+# Medical Devices, Robotics & Diagnostics
+ISRG
 DXCM
 GEHC
-GILD
+
+# Veterinary Health & Diagnostics
 IDXX
-ISRG
-REGN
-RXRX
-VRTX
-# Consumer, Retail & Industrial Logistics
-ABNB
-ADP
-BKNG
-CCEP
+
+# Biotech & Medical Optics
+CGEN
+EYE
+
+# E-Commerce & Digital Marketplace
+MELI
+PDD
+SHOP
+
+# Mega Retailers & Specialty Chains
 COST
-CPRT
-CSX
-CTAS
+WMT
+ORLY
+ROST
+
+# Food, Beverage & Consumer Staples
+PEP
+MDLZ
+SBUX
+KHC
+MNST
+CCEP
+KDP
+
+# Travel, Delivery & Hospitality
+BKNG
+ABNB
 DASH
+
+# Logistics, Freight & Industrial Equipment
+HON
+CPRT
+ODFL
+CSX
+PCAR
 FAST
 FER
-HON
-KDP
-KHC
-MDLZ
-MELI
-MNST
-ODFL
-ORLY
+
+# HR, Payroll & Business Services
+ADP
 PAYX
-PCAR
-PDD
-PEP
-ROST
-SBUX
-SHOP
+CTAS
 TRI
-TSLA
+
+# Streaming, Gaming & Digital Entertainment
+NFLX
 TTWO
 WBD
-WMT
-# Energy & Materials
+
+# Digital Brokerage & Exchanges
+HOOD
+COIN
+CRCL
+
+# Bitcoin Treasury & Corporate Holders
+MSTR
+BMNR
+
+# Crypto Mining & Infrastructure
+CCUP
+WULF
+
+# Sports Betting & iGaming
+SBET
+
+# Energy Equipment, Technology & Services
 BKR
+
+# Oil & Gas Exploration & Production
 FANG
+
+# Industrial Gases & Chemical Materials
 LIN
-# Utilities
+
+# Regulated Electric & Power Utilities
 AEP
 EXC
 XEL
-# Index ETFs
-QQQ
-SPY
+
+# Pure-Play Quantum Computing & Quantum ETF
+IONQ
+QBTS
+RGTI
+QUBT
+INFQ
+QTUM
+
+# Optical Communications, Photonics & Lasers
+COHR
+LITE
+POET
+LAES
+LASR
+RZLV
