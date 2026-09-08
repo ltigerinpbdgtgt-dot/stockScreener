@@ -1,31 +1,37 @@
 Symbol
-# Technology & Semiconductor Leading ETFs
-SMH
-SOXX
-XLK
-VGT
-ROM
-
-# Market Indices (Broad Market 1x)
-QQQ
+# Broad Market Indices (US Market Core 1x)
 SPY
 VOO
 VTI
-IWM
+QQQ
 DIA
+IWM
 
-# AI, Robotics & ARK Innovation
-ARKW
+# Technology & Semiconductors
+XLK
+VGT
+SMH
+SOXX
+ROM
+
+# AI, Robotics & Autonomous Tech
 ARKQ
-ARKK
-ARKF
-ARKX
-ARKG
 
-# Healthcare & Biotechnology
+# Disruptive Innovation & Internet
+ARKK
+ARKW
+
+# Fintech & Crypto Innovation
+ARKF
+
+# Space & Aerospace Innovation
+ARKX
+
+# Healthcare, Biotech & Genomics
 XLV
 IBB
 XBI
+ARKG
 CURE
 BIB
 
@@ -34,7 +40,7 @@ XLI
 ITA
 PPA
 
-# Finance & Banking
+# Financials & Regional Banking
 XLF
 KBE
 KRE
@@ -47,26 +53,33 @@ ICLN
 TAN
 DIG
 
+# Rare Earth & Uranium Energy
+REMX
+URA
+URNM
+
 # Consumer Discretionary & Staples
 XLY
 XLP
 UCC
 
-# Communication & Media
+# Communication & Media Services
 XLC
 
-# Real Estate & Utilities
+# Utilities & Real Estate
 XLU
 XLRE
 UYR
 
-# Fixed Income, Gold & Precious Metals
-GLD
-TLT
-SLV
+# Fixed Income & Bonds
 AGG
-AGQ
+TLT
 UBT
+
+# Gold, Silver & Precious Metals
+GLD
+SLV
+AGQ
 
 # Market Leverage & Index 2x (High Risk)
 USD
