@@ -6,9 +6,9 @@ import os
 # 1. 페이지 설정
 st.set_page_config(page_title="맞춤형 & S&P 500 퀀트 스크리너", page_icon="📈", layout="wide")
 st.title("📈 커스텀 & S&P 500 퀀트 스크리너 대시보드")
-st.caption("대가들의 매매 전략(Minervini, O'Neil, Williams, Greenblatt) + 거래량 수급 검증 시스템")
+st.caption("대가들의 매매 전략 + 마법공식 및 대체 퀄리티-밸류(ROE/FCF) 스크리닝")
 
-# 2. 파일 내 `#` 주석 형태의 섹터 분류 파싱 함수
+# 2. 파일 파싱 함수
 @st.cache_data(ttl=86400)
 def load_tickers_and_sectors_from_file(file_path):
     tickers = []
@@ -35,7 +35,7 @@ def load_tickers_and_sectors_from_file(file_path):
             pass
     return tickers, ticker_sector_map
 
-# 3. 고속 일괄(Batch) 데이터 수집 및 이평선/거래량/국면/마법공식 지표 계산 함수
+# 3. 데이터 수집 및 대체 지표(ROE, ROA, FCF Yield) 파싱 함수
 @st.cache_data(ttl=3600)
 def fetch_and_process_data_fast(tickers, file_sector_map=None):
     if not tickers:
@@ -64,7 +64,7 @@ def fetch_and_process_data_fast(tickers, file_sector_map=None):
                 if len(close) < 200 or len(volume) < 20:
                     continue
                 
-                # 1. 가격 및 이동평균선
+                # 차트 이평선 및 수급
                 price = float(close.iloc[-1])
                 sma200 = float(close.rolling(200).mean().iloc[-1])
                 sma100 = float(close.rolling(100).mean().iloc[-1])
@@ -72,14 +72,12 @@ def fetch_and_process_data_fast(tickers, file_sector_map=None):
                 sma20  = float(close.rolling(20).mean().iloc[-1])
                 sma9   = float(close.rolling(9).mean().iloc[-1])
                 
-                # 2. 거래량(Volume) 지표 계산
                 curr_vol = float(volume.iloc[-1])
                 vol_sma20 = float(volume.rolling(20).mean().iloc[-1])
                 vol_sma5  = float(volume.rolling(5).mean().iloc[-1])
                 vol_ratio = (curr_vol / vol_sma20) if vol_sma20 > 0 else 0.0
                 
-                # 최근 5일 내 수급 유입(거래량 급증 + 주가 상승) 검증
-                # 20일 평균 거래량 대비 2배 이상 & 일간 수익률 +3% 이상인 날이 최근 5일 내 존재하는지 확인
+                # 최근 5일 수급 유입 검증
                 recent_5_close = close.iloc[-6:]
                 recent_5_vol = volume.iloc[-5:]
                 recent_5_volsma20 = volume.rolling(20).mean().iloc[-5:]
@@ -91,19 +89,17 @@ def fetch_and_process_data_fast(tickers, file_sector_map=None):
                 for i in range(1, len(recent_5_close)):
                     day_ret = ((recent_5_close.iloc[i] - recent_5_close.iloc[i-1]) / recent_5_close.iloc[i-1]) * 100
                     day_vol_ratio = (recent_5_vol.iloc[i-1] / recent_5_volsma20.iloc[i-1]) if recent_5_volsma20.iloc[i-1] > 0 else 0.0
-                    
                     if day_vol_ratio > max_recent_vol_ratio:
                         max_recent_vol_ratio = day_vol_ratio
                         max_recent_return = day_ret
-                        
-                    # 기준: 최근 5일 중 거래량 2.0배 이상 & 상승률 +3% 이상 유입일 존재 여부
                     if day_vol_ratio >= 2.0 and day_ret >= 3.0:
                         has_vol_spike = True
                 
-                # 3. 섹터 및 펀더멘털 / 마법공식 지표 수집
+                # 펀더멘털 & 마법공식 대체 지표 수집
                 sector = file_sector_map.get(ticker)
                 trail_pe, fwd_pe = None, None
                 roc, earnings_yield = None, None
+                roe, roa, fcf_yield = None, None, None
                 
                 try:
                     t_obj = yf.Ticker(ticker)
@@ -116,25 +112,37 @@ def fetch_and_process_data_fast(tickers, file_sector_map=None):
                     trail_pe = getattr(fast_info, 'trailing_pe', None)
                     fwd_pe = getattr(fast_info, 'forward_pe', None)
                     
-                    # 조엘 그린블라트 마법공식 지표 계산
+                    # 1. 원조 마법공식 항목
                     ebit = info_dict.get('ebitda') or info_dict.get('operatingCashflow')
                     total_assets = info_dict.get('totalAssets')
                     ev = info_dict.get('enterpriseValue')
                     
-                    if ebit and total_assets:
-                        tangible_capital = total_assets * 0.7
-                        if tangible_capital > 0:
-                            roc = (ebit / tangible_capital) * 100
-                            
+                    if ebit and total_assets and total_assets > 0:
+                        roc = (ebit / (total_assets * 0.7)) * 100
                     if ebit and ev and ev > 0:
                         earnings_yield = (ebit / ev) * 100
+                        
+                    # 2. 확실하게 구해지는 마법공식 대체 지표 항목들
+                    roe_val = info_dict.get('returnOnEquity')
+                    if roe_val is not None:
+                        roe = roe_val * 100
+                        
+                    roa_val = info_dict.get('returnOnAssets')
+                    if roa_val is not None:
+                        roa = roa_val * 100
+                        
+                    free_cf = info_dict.get('freeCashflow')
+                    mcap = info_dict.get('marketCap')
+                    if free_cf and mcap and mcap > 0:
+                        fcf_yield = (free_cf / mcap) * 100
+                        
                 except Exception:
                     if not sector:
                         sector = "N/A"
                         
                 pe_improving = bool(fwd_pe and trail_pe and fwd_pe < trail_pe)
                 
-                # 4. 5대 국면 분류 로직
+                # 5대 국면
                 if (sma200 < sma50) and (sma50 < sma20) and (price > sma50):
                     phase = "🟢 [그룹 1] 주도주 정배열"
                 elif (sma200 < sma50) and (sma9 > sma20) and (price > sma9):
@@ -146,14 +154,11 @@ def fetch_and_process_data_fast(tickers, file_sector_map=None):
                 else:
                     phase = "🔴 [그룹 5] 완벽한 역배열/하락세"
                 
-                yahoo_link = f"https://finance.yahoo.com/quote/{ticker}"
-                seeking_alpha_link = f"https://seekingalpha.com/symbol/{ticker}"
-                
                 all_data.append({
                     "티커": ticker,
                     "섹터": sector,
-                    "Yahoo": yahoo_link,
-                    "SeekingAlpha": seeking_alpha_link,
+                    "Yahoo": f"https://finance.yahoo.com/quote/{ticker}",
+                    "SeekingAlpha": f"https://seekingalpha.com/symbol/{ticker}",
                     "현재가": round(price, 2),
                     "국면분류": phase,
                     "Volume_Ratio": round(vol_ratio, 2),
@@ -172,6 +177,9 @@ def fetch_and_process_data_fast(tickers, file_sector_map=None):
                     "PER_개선": pe_improving,
                     "ROC": round(roc, 2) if roc is not None else None,
                     "Earnings_Yield": round(earnings_yield, 2) if earnings_yield is not None else None,
+                    "ROE": round(roe, 2) if roe is not None else None,
+                    "ROA": round(roa, 2) if roa is not None else None,
+                    "FCF_Yield": round(fcf_yield, 2) if fcf_yield is not None else None,
                     "diff_sma9": abs((price - sma9) / sma9) * 100,
                     "diff_sma20": abs((price - sma20) / sma20) * 100,
                     "diff_sma50": abs((price - sma50) / sma50) * 100,
@@ -183,20 +191,32 @@ def fetch_and_process_data_fast(tickers, file_sector_map=None):
                 
         df_res = pd.DataFrame(all_data)
         
-        # 마법공식 순위 계산
+        # 1. 원조 마법공식 순위
         if not df_res.empty and "ROC" in df_res.columns and "Earnings_Yield" in df_res.columns:
             valid_mf = df_res.dropna(subset=["ROC", "Earnings_Yield"]).copy()
             if not valid_mf.empty:
                 valid_mf["ROC_Rank"] = valid_mf["ROC"].rank(ascending=False)
                 valid_mf["EY_Rank"] = valid_mf["Earnings_Yield"].rank(ascending=False)
-                valid_mf["Magic_Score"] = valid_mf["ROC_Rank"] + valid_mf["EY_Rank"]
-                valid_mf["마법공식_순위"] = valid_mf["Magic_Score"].rank(ascending=True, method="min").astype(int)
-                df_res = df_res.merge(valid_mf[["티커", "ROC_Rank", "EY_Rank", "Magic_Score", "마법공식_순위"]], on="티커", how="left")
+                valid_mf["마법공식_순위"] = (valid_mf["ROC_Rank"] + valid_mf["EY_Rank"]).rank(ascending=True, method="min").astype(int)
+                df_res = df_res.merge(valid_mf[["티커", "마법공식_순위"]], on="티커", how="left")
             else:
                 df_res["마법공식_순위"] = None
         else:
             df_res["마법공식_순위"] = None
-            
+
+        # 2. 대체 마법공식 (ROE + FCF Yield) 순위
+        if not df_res.empty and "ROE" in df_res.columns and "FCF_Yield" in df_res.columns:
+            valid_alt = df_res.dropna(subset=["ROE", "FCF_Yield"]).copy()
+            if not valid_alt.empty:
+                valid_alt["ROE_Rank"] = valid_alt["ROE"].rank(ascending=False)
+                valid_alt["FCF_Rank"] = valid_alt["FCF_Yield"].rank(ascending=False)
+                valid_alt["대체마법_순위"] = (valid_alt["ROE_Rank"] + valid_alt["FCF_Rank"]).rank(ascending=True, method="min").astype(int)
+                df_res = df_res.merge(valid_alt[["티커", "대체마법_순위"]], on="티커", how="left")
+            else:
+                df_res["대체마법_순위"] = None
+        else:
+            df_res["대체마법_순위"] = None
+
         return df_res
 
 # ------------------------------------------------------------------
@@ -204,13 +224,16 @@ def fetch_and_process_data_fast(tickers, file_sector_map=None):
 # ------------------------------------------------------------------
 def display_styled_dataframe(df_to_show, columns_to_display):
     column_config = {
-        "Yahoo": st.column_config.LinkColumn("Yahoo", display_text="📈 야후", help="야후 파이낸스 차트 및 상세 정보로 이동합니다."),
-        "SeekingAlpha": st.column_config.LinkColumn("SeekingAlpha", display_text="📰 시킹알파", help="시킹알파 뉴스 및 기업 분석 정보로 이동합니다."),
-        "Volume_Ratio": st.column_config.NumberColumn("당일 거래량 비율", help="20일 평균 대비 당일 거래량 비율 (1.0 = 100%)", format="%.2f"),
-        "최근5일_최대거래량비율": st.column_config.NumberColumn("최근5일 최대거래량비율", help="최근 5일 중 발생한 20일 평균 대비 최대 거래량 비율", format="%.2f"),
-        "최근5일_최대상승률": st.column_config.NumberColumn("최근5일 최대상승률 (%)", help="최근 5일 중 최대 거래량이 터진 날의 주가 상승률", format="%.2f%%"),
-        "ROC": st.column_config.NumberColumn("ROC (%)", help="자본수익률 (EBIT / 투입자본)", format="%.2f%%"),
-        "Earnings_Yield": st.column_config.NumberColumn("이익수익률 (%)", help="이익수익률 (EBIT / 기업가치)", format="%.2f%%")
+        "Yahoo": st.column_config.LinkColumn("Yahoo", display_text="📈 야후", help="야후 파이낸스로 이동"),
+        "SeekingAlpha": st.column_config.LinkColumn("SeekingAlpha", display_text="📰 시킹알파", help="시킹알파로 이동"),
+        "Volume_Ratio": st.column_config.NumberColumn("당일 거래량 비율", format="%.2f"),
+        "최근5일_최대거래량비율": st.column_config.NumberColumn("최근5일 최대거래량비율", format="%.2f"),
+        "최근5일_최대상승률": st.column_config.NumberColumn("최근5일 최대상승률 (%)", format="%.2f%%"),
+        "ROC": st.column_config.NumberColumn("ROC (%)", format="%.2f%%"),
+        "Earnings_Yield": st.column_config.NumberColumn("이익수익률 (%)", format="%.2f%%"),
+        "ROE": st.column_config.NumberColumn("ROE (%)", help="자기자본이익률", format="%.2f%%"),
+        "ROA": st.column_config.NumberColumn("ROA (%)", help="총자산이익률", format="%.2f%%"),
+        "FCF_Yield": st.column_config.NumberColumn("FCF Yield (%)", help="시가총액 대비 잉여현금흐름 비율", format="%.2f%%")
     }
     st.dataframe(df_to_show[columns_to_display], column_config=column_config, use_container_width=True)
 
@@ -267,14 +290,8 @@ elif mode == "📁 직접 CSV 파일 업로드":
             st.sidebar.success(f"파일에서 {len(target_tickers)}개 티커를 읽었습니다.")
         except Exception:
             st.sidebar.error("파일을 읽는 중 오류가 발생했습니다.")
-    else:
-        st.sidebar.caption("💡 티커 목록 및 `# 섹터명` 주석이 담긴 CSV 파일을 업로드하세요.")
 else:
-    custom_input = st.sidebar.text_area(
-        "티커를 쉼표(,)나 줄바꿈으로 구분해 입력하세요 (# 섹터명 지정 가능):",
-        value="# Tech\nNVDA, AMD, AAPL, MSFT\n# ETF\nQQQ, SPY",
-        height=140
-    )
+    custom_input = st.sidebar.text_area("티커를 입력하세요:", value="# Tech\nNVDA, AMD, AAPL, MSFT", height=100)
     raw_lines = custom_input.splitlines()
     current_sec = "미분류"
     for line in raw_lines:
@@ -290,183 +307,90 @@ else:
             if t:
                 target_tickers.append(t)
                 file_sector_map[t] = current_sec
-    st.sidebar.success(f"입력된 {len(target_tickers)}개 종목을 분석합니다.")
 
-# 데이터 수집 및 분석 실행
 if target_tickers:
     df = fetch_and_process_data_fast(target_tickers, file_sector_map)
 else:
     df = pd.DataFrame()
 
-# 상단 알림 및 갱신 버튼
 if not df.empty:
     st.success(f"총 {len(df)}개 종목 분석 완료!")
     if st.button("🔄 데이터 강제 갱신", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
 else:
-    if mode == "📁 직접 CSV 파일 업로드" and not target_tickers:
-        st.info("좌측 사이드바에서 CSV 파일을 업로드해주세요.")
-    else:
-        st.warning("분석할 종목 데이터가 없거나 수집 중 오류가 발생했습니다.")
     st.stop()
 
 # ------------------------------------------------------------------
 # 탭 구성
 # ------------------------------------------------------------------
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "🏆 전략 1: 미너비니 정배열 + 수급지속", 
-    "🎯 전략 2: 오닐 반등 + 거래량 유입", 
-    "📍 전략 3: 이평선 근접 (소진 vs 수급유입)", 
-    "🧙‍♂️ 전략 4: 조엘 그린블라트 마법공식",
-    "📊 탭 5: 시장 국면 종합 분류"
+    "🏆 전략 1: 미너비니 정배열", 
+    "🎯 전략 2: 오닐 반등", 
+    "📍 전략 3: 이평선 근접", 
+    "🧙‍♂️ 전략 4: 마법공식 (원조 vs 대체)",
+    "📊 탭 5: 시장 국면 종합"
 ])
 
-# TAB 1: 미너비니 정배열
 with tab1:
-    st.subheader("전략 1. 미너비니 트렌드 템플릿 (정배열 + 거래량 지속)")
-    st.caption("**조건**: `200일선 < 50일선 < 20일선` AND `주가 > 50일선` AND `5일 평균거래량 > 20일 평균거래량`")
-    cond1 = (df["국면분류"] == "🟢 [그룹 1] 주도주 정배열") & (df["Vol_5일평균"] > df["Vol_20일평균"])
-    res1 = df[cond1]
-    cols1 = ["티커", "섹터", "Yahoo", "SeekingAlpha", "현재가", "국면분류", "Volume_Ratio", "SMA20", "SMA50", "SMA200", "PER_개선", "Forward_PE"]
-    if not res1.empty:
-        display_styled_dataframe(res1, cols1)
-    else:
-        st.info("현재 정배열 및 단기 거래량 우상향 조건을 만족하는 종목이 없습니다.")
+    st.subheader("전략 1. 미너비니 트렌드 템플릿")
+    res1 = df[(df["국면분류"] == "🟢 [그룹 1] 주도주 정배열") & (df["Vol_5일평균"] > df["Vol_20일평균"])]
+    cols1 = ["티커", "섹터", "Yahoo", "SeekingAlpha", "현재가", "국면분류", "Volume_Ratio", "SMA20", "SMA50", "SMA200", "Forward_PE"]
+    display_styled_dataframe(res1, cols1) if not res1.empty else st.info("조건 만족 종목 없음")
 
-# TAB 2: 오닐 눌림목 반등
 with tab2:
-    st.subheader("전략 2. 오닐 & 와인스타인 눌림목 반등 (수급 유입 타점)")
-    st.caption("**조건**: `200일선 < 50일선` AND `9일선 > 20일선` AND `주가 > 9일선` AND `거래량 비율 >= 1.2` (20일 평균 대비 20% 이상 수급 증가)")
-    cond2 = (df["국면분류"] == "🎯 [그룹 2] 눌림목 반등") & (df["Volume_Ratio"] >= 1.2)
-    res2 = df[cond2]
-    cols2 = ["티커", "섹터", "Yahoo", "SeekingAlpha", "현재가", "국면분류", "Volume_Ratio", "SMA9", "SMA20", "SMA50", "PER_개선", "Forward_PE"]
-    if not res2.empty:
-        display_styled_dataframe(res2, cols2)
-    else:
-        st.info("현재 눌림목 후 거래량이 동반된 단기 반등 종목이 없습니다.")
+    st.subheader("전략 2. 오닐 눌림목 반등")
+    res2 = df[(df["국면분류"] == "🎯 [그룹 2] 눌림목 반등") & (df["Volume_Ratio"] >= 1.2)]
+    cols2 = ["티커", "섹터", "Yahoo", "SeekingAlpha", "현재가", "국면분류", "Volume_Ratio", "SMA9", "SMA20", "Forward_PE"]
+    display_styled_dataframe(res2, cols2) if not res2.empty else st.info("조건 만족 종목 없음")
 
-# TAB 3: 이평선 근접 (거래량 소진 vs 수급 유입 옵션 추가)
 with tab3:
     st.subheader("전략 3. 각 이동평균선 근처(±3%) 수급 분석")
-    st.caption("주가가 핵심 지지선 근처에 위치할 때 **[거래량 소진(Dry-up)]** 또는 최근 **[강한 수급 유입(Volume Spike)]** 조건을 선택해 스크리닝합니다.")
+    vol_filter_mode = st.radio("거래량 옵션:", ["📉 거래량 소진 (Dry-up)", "🚀 수급 유입 (Volume Spike)"], horizontal=True)
     
-    # 전략 3 전용 필터 모드 선택 옵션
-    vol_filter_mode = st.radio(
-        "🔎 거래량 분석 조건을 선택하세요:",
-        options=[
-            "📉 거래량 소진 (Dry-up: 당일 거래량 비율 <= 1.0 - 매도세 고갈)",
-            "🚀 거래량 급증 수급 유입 (Volume Spike: 최근 5일 내 거래량 2배 이상 & 상승률 +3% 이상)"
-        ],
-        horizontal=True
-    )
-    
-    st.divider()
-    
-    def get_filtered_df_by_sma(df_source, sma_col, diff_col):
-        if "거래량 소진" in vol_filter_mode:
+    def get_filtered_df(df_source, sma_col, diff_col):
+        if "소진" in vol_filter_mode:
             filtered = df_source[(df_source[diff_col] <= 3.0) & (df_source["Volume_Ratio"] <= 1.0)].sort_values(by=diff_col)
-            display_cols = ["티커", "섹터", "Yahoo", "SeekingAlpha", "현재가", "Volume_Ratio", "국면분류", sma_col, "Forward_PE"]
+            cols = ["티커", "섹터", "Yahoo", "현재가", "Volume_Ratio", "국면분류", sma_col]
         else:
             filtered = df_source[(df_source[diff_col] <= 3.0) & (df_source["수급유입_신호"] == True)].sort_values(by="최근5일_최대거래량비율", ascending=False)
-            display_cols = ["티커", "섹터", "Yahoo", "SeekingAlpha", "현재가", "최근5일_최대거래량비율", "최근5일_최대상승률", "국면분류", sma_col, "Forward_PE"]
-        return filtered, display_cols
+            cols = ["티커", "섹터", "Yahoo", "현재가", "최근5일_최대거래량비율", "최근5일_최대상승률", "국면분류", sma_col]
+        return filtered, cols
 
-    st.markdown("### 🔹 200일선 근접 (±3%)")
-    df_200, cols_200 = get_filtered_df_by_sma(df, "SMA200", "diff_sma200")
-    if not df_200.empty:
-        display_styled_dataframe(df_200, cols_200)
-    else:
-        st.write("조건을 만족하는 종목이 없습니다.")
+    st.markdown("### 🔹 200일선 근접")
+    d, c = get_filtered_df(df, "SMA200", "diff_sma200")
+    display_styled_dataframe(d, c) if not d.empty else st.write("조건 만족 종목 없음")
 
-    st.divider()
-    st.markdown("### 🔹 100일선 근접 (±3%)")
-    df_100, cols_100 = get_filtered_df_by_sma(df, "SMA100", "diff_sma100")
-    if not df_100.empty:
-        display_styled_dataframe(df_100, cols_100)
-    else:
-        st.write("조건을 만족하는 종목이 없습니다.")
-
-    st.divider()
-    st.markdown("### 🔹 50일선 근접 (±3%)")
-    df_50, cols_50 = get_filtered_df_by_sma(df, "SMA50", "diff_sma50")
-    if not df_50.empty:
-        display_styled_dataframe(df_50, cols_50)
-    else:
-        st.write("조건을 만족하는 종목이 없습니다.")
-
-    st.divider()
-    st.markdown("### 🔹 20일선 근접 (±3%)")
-    df_20, cols_20 = get_filtered_df_by_sma(df, "SMA20", "diff_sma20")
-    if not df_20.empty:
-        display_styled_dataframe(df_20, cols_20)
-    else:
-        st.write("조건을 만족하는 종목이 없습니다.")
-
-    st.divider()
-    st.markdown("### 🔹 9일선 근접 (±3%)")
-    df_9, cols_9 = get_filtered_df_by_sma(df, "SMA9", "diff_sma9")
-    if not df_9.empty:
-        display_styled_dataframe(df_9, cols_9)
-    else:
-        st.write("조건을 만족하는 종목이 없습니다.")
-
-# TAB 4: 조엘 그린블라트 마법공식
 with tab4:
-    st.subheader("전략 4. 조엘 그린블라트 마법공식 (Magic Formula)")
-    st.caption("**원리**: 높은 자본수익률(ROC, 우수한 기업) + 높은 이익수익률(Earnings Yield, 저평가 기업)의 합산 순위 산출")
+    st.subheader("전략 4. 퀀트 마법공식 (원조 vs 대체 퀄리티-밸류)")
     
-    if "마법공식_순위" in df.columns and df["마법공식_순위"].notna().any():
-        df_mf = df.dropna(subset=["마법공식_순위"]).sort_values(by="마법공식_순위")
-        
-        exclude_fin_util = st.checkbox("금융(Financials) 및 유틸리티(Utilities) 섹터 제외하기", value=True)
-        if exclude_fin_util:
-            df_mf = df_mf[~df_mf["섹터"].astype(str).str.contains("Financial|Utility", case=False, na=False)]
-            
-        cols_tab4 = ["마법공식_순위", "티커", "섹터", "ROC", "Earnings_Yield", "현재가", "Forward_PE", "국면분류", "Yahoo", "SeekingAlpha"]
-        display_styled_dataframe(df_mf, cols_tab4)
+    view_mode = st.radio("조회할 방식을 선택하세요:", ["✨ 대체 마법공식 (ROE + FCF Yield) - 데이터 완성도 높은 추천!", "🧙‍♂️ 원조 마법공식 (ROC + EBIT/EV)"], horizontal=True)
+    
+    exclude_fin_util = st.checkbox("금융 및 유틸리티 섹터 제외", value=True)
+    
+    if "대체" in view_mode:
+        st.caption("**대체 원리**: 우수한 주주자본 수익성(`ROE`) + 100% 현금 흐름 밸류에이션(`FCF Yield`)의 종합 순위")
+        if "대체마법_순위" in df.columns and df["대체마법_순위"].notna().any():
+            df_alt = df.dropna(subset=["대체마법_순위"]).sort_values(by="대체마법_순위")
+            if exclude_fin_util:
+                df_alt = df_alt[~df_alt["섹터"].astype(str).str.contains("Financial|Utility", case=False, na=False)]
+            cols_alt = ["대체마법_순위", "티커", "섹터", "ROE", "ROA", "FCF_Yield", "현재가", "Forward_PE", "국면분류", "Yahoo"]
+            display_styled_dataframe(df_alt, cols_alt)
+        else:
+            st.info("대체 지표를 계산할 재무 데이터가 부족합니다.")
     else:
-        st.info("마법공식 수치(ROC, 이익수익률)를 계산할 수 있는 재무 데이터가 부족합니다.")
+        st.caption("**원조 원리**: 자본수익률(`ROC`) + 이익수익률(`Earnings Yield`)의 종합 순위")
+        if "마법공식_순위" in df.columns and df["마법공식_순위"].notna().any():
+            df_mf = df.dropna(subset=["마법공식_순위"]).sort_values(by="마법공식_순위")
+            if exclude_fin_util:
+                df_mf = df_mf[~df_mf["섹터"].astype(str).str.contains("Financial|Utility", case=False, na=False)]
+            cols_mf = ["마법공식_순위", "티커", "섹터", "ROC", "Earnings_Yield", "현재가", "Forward_PE", "국면분류", "Yahoo"]
+            display_styled_dataframe(df_mf, cols_mf)
+        else:
+            st.info("원조 마법공식 데이터를 구하지 못했습니다.")
 
-# TAB 5: 시장 국면 종합 분석
 with tab5:
-    st.subheader("📊 시장 국면 종합 분석 & 건강도 지표")
-    st.caption("전체 분석 대상 종목을 5가지 국면으로 나누어 시장 전체의 매수/관망/하락 에너지를 파악합니다.")
-    
+    st.subheader("📊 시장 국면 종합 분석")
     counts = df["국면분류"].value_counts()
-    total_len = len(df)
-    
-    c1, c2, c3, c4, c5 = st.columns(5)
-    g1_cnt = counts.get("🟢 [그룹 1] 주도주 정배열", 0)
-    g2_cnt = counts.get("🎯 [그룹 2] 눌림목 반등", 0)
-    g3_cnt = counts.get("🟡 [그룹 3] 조정 관망대기", 0)
-    g4_cnt = counts.get("🟠 [그룹 4] 바닥 탈출/턴어라운드", 0)
-    g5_cnt = counts.get("🔴 [그룹 5] 완벽한 역배열/하락세", 0)
-    
-    c1.metric("🟢 정배열 주도주", f"{g1_cnt}개", f"{round(g1_cnt/total_len*100, 1)}%")
-    c2.metric("🎯 눌림목 반등", f"{g2_cnt}개", f"{round(g2_cnt/total_len*100, 1)}%")
-    c3.metric("🟡 조정 관망대기", f"{g3_cnt}개", f"{round(g3_cnt/total_len*100, 1)}%")
-    c4.metric("🟠 바닥 턴어라운드", f"{g4_cnt}개", f"{round(g4_cnt/total_len*100, 1)}%")
-    c5.metric("🔴 하락 추세", f"{g5_cnt}개", f"{round(g5_cnt/total_len*100, 1)}%")
-    
-    st.divider()
-    selected_phase = st.selectbox(
-        "조회할 그룹을 선택하세요:",
-        options=[
-            "전체 보기",
-            "🟢 [그룹 1] 주도주 정배열",
-            "🎯 [그룹 2] 눌림목 반등",
-            "🟡 [그룹 3] 조정 관망대기",
-            "🟠 [그룹 4] 바닥 탈출/턴어라운드",
-            "🔴 [그룹 5] 완벽한 역배열/하락세"
-        ]
-    )
-    
-    if selected_phase == "전체 보기":
-        filtered_df = df
-    else:
-        filtered_df = df[df["국면분류"] == selected_phase]
-        
-    st.markdown(f"**해당 그룹 종목 목록 ({len(filtered_df)}개)**")
-    cols_tab5 = ["티커", "섹터", "Yahoo", "SeekingAlpha", "국면분류", "현재가", "Volume_Ratio", "SMA20", "SMA50", "SMA200", "PER_개선", "Forward_PE"]
-    display_styled_dataframe(filtered_df, cols_tab5)
+    st.write(counts)
+    display_styled_dataframe(df, ["티커", "섹터", "Yahoo", "국면분류", "현재가", "Volume_Ratio", "Forward_PE"])
